@@ -26,7 +26,11 @@ COPY . .
 RUN npm run build
 
 # Образ для запуска без root
-FROM nginxinc/nginx-unprivileged:1.27-alpine AS runtime
+FROM nginxinc/nginx-unprivileged:1.31.1-alpine3.23 AS runtime
+
+USER root
+RUN apk upgrade --no-cache \
+    && rm -rf /var/cache/apk/*
 
 COPY --chown=101:101 nginx.conf /etc/nginx/conf.d/default.conf
 # Копирование собранного приложения
