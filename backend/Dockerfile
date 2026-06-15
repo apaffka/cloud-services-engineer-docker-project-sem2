@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1.7
 
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26.4-alpine AS builder
 WORKDIR /src
 
 # Сертификаты на всякий случай, если захочу прикрутить когда-то TLS
@@ -33,15 +33,15 @@ RUN --mount=type=cache,target=/go/pkg/mod \
       -o /out/momo-store-api \
       ./cmd/api
 
-FROM alpine:3.20 AS runtime
+FROM alpine:3.23.4 AS runtime
 
 # Создаю пользователя app, ставим сертификат, готовим папочки
-RUN addgroup -g 10001 -S app \
+RUN apk upgrade --no-cache libcrypto3 libssl3 \
+    && addgroup -g 10001 -S app \
     && adduser -u 10001 -S -G app -H -h /app app \
     && apk add --no-cache ca-certificates \
     && mkdir -p /app/data /tmp \
-    && chown -R app:app /app /tmp \
-    && rm -rf /var/cache/apk/*
+    && chown -R app:app /app /tmp
 
 WORKDIR /app
 
