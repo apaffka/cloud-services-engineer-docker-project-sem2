@@ -12,19 +12,63 @@ jobs:
       steps:
         - name: Check out the repo
           uses: actions/checkout@v3
+
         - name: Set up Docker Buildx
           uses: docker/setup-buildx-action@v2
-        - name: Login to Docker 
+
+        # ДОБАВЛЕНО: собираем бэкенд локально для проверки Trivy
+        - name: Build Backend image for security scan
+          uses: docker/build-push-action@v4
+          with:
+            context: ./backend/
+            load: true
+            push: false
+            tags: docker-project-backend:scan
+
+        # ДОБАВЛЕНО: собираем фронта локально для проверки Trivy
+        - name: Build Frontend image for security scan
+          uses: docker/build-push-action@v4
+          with:
+            context: ./frontend/
+            load: true
+            push: false
+            tags: docker-project-frontend:scan
+
+        # ДОБАВЛЕНО: сканирование бэка
+        - name: Scan Backend image with Trivy
+          uses: aquasecurity/trivy-action@0.35.0
+          with:
+            image-ref: docker-project-backend:scan
+            format: table
+            exit-code: '1'
+            ignore-unfixed: true
+            vuln-type: os,library
+            severity: HIGH,CRITICAL
+
+        # ДОБАВЛЕНО: сканирование фронта
+        - name: Scan Frontend image with Trivy
+          uses: aquasecurity/trivy-action@0.35.0
+          with:
+            image-ref: docker-project-frontend:scan
+            format: table
+            exit-code: '1'
+            ignore-unfixed: true
+            vuln-type: os,library
+            severity: HIGH,CRITICAL
+
+        - name: Login to Docker
           uses: docker/login-action@v2
           with:
             username: ${{ secrets.DOCKER_USER }}
             password: ${{ secrets.DOCKER_PASSWORD }}
+
         - name: Push Backend to DockerHub
           uses: docker/build-push-action@v4
           with:
             context: ./backend/
             push: true
             tags: ${{ secrets.DOCKER_USER }}/docker-project-backend:latest
+
         - name: Push Frontend to DockerHub
           uses: docker/build-push-action@v4
           with:
@@ -38,18 +82,29 @@ jobs:
     steps:
       - name: Check out the repo
         uses: actions/checkout@v3
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v2
-      # надо докинуть файл с секретами
+
+      # ДОБАВЛЕНО: создаём secret, потому что он не хранится в git
       - name: Prepare Docker secret file
         run: |
           mkdir -p secrets
           openssl rand -base64 32 > secrets/backend_app_secret.txt
           chmod 600 secrets/backend_app_secret.txt
+
+      # ДОБАВЛЕНО: активируем prod для компооуза
+      - name: Set Docker Compose profile
+        run: echo "COMPOSE_PROFILES=prod" >> $GITHUB_ENV
+
       - name: Build via Docker Compose
         uses: hoverkraft-tech/compose-action@v2.2.0
-        # выбираем что запускать (прод или дэв)
-        env:
-          COMPOSE_PROFILES: prod
-        with:
-          compose-file: ./docker-compose.yml
+
+      # ДОБАВЛЕНО: smoke-test
+      - name: Test application health
+        run: |
+          sleep 10
+          docker compose ps
+          curl -f http://localhost/health
+          curl -f http://localhost/api/products
+          curl -f http://localhost/api/categories
